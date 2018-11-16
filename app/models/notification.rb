@@ -34,6 +34,8 @@ class Notification < ApplicationRecord
   validates :subject_url, presence: true
   validates :archived, inclusion: [true, false]
 
+  after_update :push_if_changed
+
   paginates_per 20
 
   class << self
@@ -164,12 +166,25 @@ class Notification < ApplicationRecord
     return nil unless repository.present?
     repository.private? && !repository.required_plan_available?
   end
-  
+
   def subject_number
     subject_url.scan(/\d+$/).first
   end
-  
+
   def display_thread?
     Octobox.include_comments? && subjectable? && subject.present? && user.display_comments?
+  end
+
+  def push_if_changed
+    push_to_channel if (saved_changes.keys & pushable_fields).any?
+  end
+
+  def pushable_fields
+    ['reason', 'subject_title', 'subject_url', 'subject_type', 'unread']
+  end
+
+  def push_to_channel
+    string = ApplicationController.render(partial: 'notifications/notification', locals: { notification: self})
+    ActionCable.server.broadcast "notifications:#{user_id}", { id: "#notification-#{id}", html: string }
   end
 end

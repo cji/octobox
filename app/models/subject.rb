@@ -15,6 +15,7 @@ class Subject < ApplicationRecord
   validates :url, presence: true, uniqueness: true
 
   after_update :sync_involved_users
+  after_save :push_to_channels
 
   def update_labels(remote_labels)
     existing_labels = labels.to_a
@@ -94,7 +95,15 @@ class Subject < ApplicationRecord
     end
   end
 
+  def push_to_channels
+    notifications.find_each(&:push_to_channel) if (saved_changes.keys & pushable_fields).any?
+  end
+
   private
+
+  def pushable_fields
+    ['state', 'author', 'status', 'body']
+  end
 
   def assign_status(remote_status)
     if remote_status.state == 'pending'
